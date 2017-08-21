@@ -1,0 +1,7 @@
+#*.WK
+*.bak
+*.sdf
+#/source_insight/
+/fontLibtool_pc/Debug
+/fontLibtool_pc/fontLibToolsApp/Debug
+/fontLibtool_pc/ipch
