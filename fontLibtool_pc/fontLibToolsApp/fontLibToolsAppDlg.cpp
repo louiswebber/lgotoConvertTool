@@ -108,6 +108,13 @@ BOOL CfontLibToolsAppDlg::OnInitDialog()
 	hwnd	= m_hWnd;//获取对话框句柄
 	pwnd	= FromHandle(hwnd);//根据句柄转化成对话框指针
 	pSrcFile	= NULL;
+	pOutFile	= NULL;
+	memset(srcFileName, 0, 400);
+	memset(outFileName, 0, 400);
+	srcFileByte	= NULL;
+	outFileByte	= NULL;
+	column		= 0;
+	row			= 0;
 	scanDirectFlag	= USER_DIRECT_R2L;//初始化扫描方向默认从右到左
 	SetDlgItemText(IDC_BUTTON3, _T("从右向左"));
 	fontThreadHandle = CreateThread(NULL, 0, fontThreadProc, NULL, 0, NULL);
@@ -174,15 +181,16 @@ void CfontLibToolsAppDlg::OnBnClickedButton1()
 	fileDlg.m_ofn.lpstrFilter=_T("asm文件(*.asm)\0*.asm\0所有文件(*.*)\0*.*\0");
 	if( IDOK ==fileDlg.DoModal())
 	{
+		//获取源文件名
 		CString srcName = fileDlg.GetPathName();
 		SetDlgItemText(IDC_EDIT1, srcName);
 
 		int lenth	= 0;
-
+		//转换源文件名unicode到ascii码
 		lenth	= WideCharToMultiByte(CP_ACP, 0, srcName, -1, NULL, 0, NULL, 0);
 		memset(srcFileName, 0, sizeof(srcFileName));
 		WideCharToMultiByte(CP_ACP, 0, srcName, -1, srcFileName, lenth, NULL, 0);
-
+		//生成输出文件路径 和 文件名
 		memset(outFileName, 0, sizeof(outFileName));
 		memcpy(outFileName, srcFileName, sizeof(outFileName));
 
@@ -212,14 +220,10 @@ void CfontLibToolsAppDlg::OnBnClickedButton2()
 
 int fontGetSrcFileBytes(FILE* fp, unsigned char* pOutBuf, DWORD len)
 {
-	CListBox *debugList = (CListBox*)GetDlgItem(hwnd, IDC_LIST1);
-
 	if((NULL == pOutBuf) || (NULL == fp))
 	{
-		//debugList->AddString(_T("point is NULL\n"));
 		return -1;
 	}
-
 	fread_s(pOutBuf, len, len, 1, fp);
 	return 0;
 }
@@ -276,18 +280,21 @@ int fontGetConvertConfig(unsigned char *srcBuf, DWORD lenth, DWORD *column, DWOR
 
 	*column	= _col;
 	*row	= _row;
+
+	memset(pAddrDst, 0, pAddrSrc - pAddrDst);
 	return 0;
 }
 
-int fontOutputFile(FILE *fpOut, unsigned char *srcBuf, DWORD column, DWORD row, char dir)
+int fontOutputFile(char* outFileByte, unsigned char *srcBuf, DWORD column, DWORD row, char dir)
 {
 	DWORD lenth	= column * row;
 	DWORD i,j,k,data;
 	unsigned char *pSrcAddr;
-	char outBuf[50],h2StrBuf[8], *pOutBufAddr, tempData;
+	char outBuf[20],h2StrBuf[8], *pOutBufAddr, tempData;
 
-	if((NULL == fpOut) || (NULL == srcBuf))
+	if((NULL == outFileByte) || (NULL == srcBuf))
 	{
+		MessageBox(NULL,_T("非法缓存地址"), _T("注意"), MB_OK);
 		return -1;
 	}
 
@@ -317,10 +324,10 @@ int fontOutputFile(FILE *fpOut, unsigned char *srcBuf, DWORD column, DWORD row, 
 					h2StrBuf[8 - k]	= 'a' + tempData - 10;
 				}
 			}
-			memset(outBuf, 0, 50);
-			strcat_s(outBuf, 50, "lgoto    ");
+			memset(outBuf, 0, 20);
+			strcat_s(outBuf, 20, "lgoto  ");
 			pOutBufAddr	= outBuf + strlen(outBuf);
-			memset(pOutBufAddr, 0, 50 - strlen(outBuf));
+			memset(pOutBufAddr, 0, 20 - strlen(outBuf));
 			if(row >= 16)
 			{
 				*(pOutBufAddr + 0)	= h2StrBuf[4];
@@ -342,8 +349,10 @@ int fontOutputFile(FILE *fpOut, unsigned char *srcBuf, DWORD column, DWORD row, 
 			else
 			{
 			}
-			strcat_s(outBuf, 50, "h\r");
-			fwrite(outBuf, sizeof(char), strlen(outBuf), fpOut);
+			strcat_s(outBuf, 20, "h\r\n");
+			pOutBufAddr	= outBuf + strlen(outBuf);
+			memset(pOutBufAddr, 0, 20 - strlen(outBuf));
+			memcpy(outFileByte + (column - i) * 20, outBuf, 20);
 		}
 	}
 	else if(USER_DIRECT_L2R == dir)
@@ -351,9 +360,9 @@ int fontOutputFile(FILE *fpOut, unsigned char *srcBuf, DWORD column, DWORD row, 
 		for(i = 0; i < column; i ++)
 		{
 			data	= 0;
-			for(j = 0; j < row; j ++)
+			for(j = row ; j > 0; j --)
 			{
-				pSrcAddr = srcBuf + (column * j + i) * USER_STRING_BYTES;
+				pSrcAddr = srcBuf + (column * (j - 1) + i) * USER_STRING_BYTES;
 				data <<= 1;
 				if((0xA1 == *pSrcAddr) && (0xF3 == *(pSrcAddr + 1)))
 				{
@@ -372,10 +381,10 @@ int fontOutputFile(FILE *fpOut, unsigned char *srcBuf, DWORD column, DWORD row, 
 					h2StrBuf[8 - k]	= 'a' + tempData - 10;
 				}
 			}
-			memset(outBuf, 0, 50);
-			strcat_s(outBuf, 50, "lgoto    ");
+			memset(outBuf, 0, 20);
+			strcat_s(outBuf, 20, "lgoto  ");
 			pOutBufAddr	= outBuf + strlen(outBuf);
-			memset(pOutBufAddr, 0, 50 - strlen(outBuf));
+			memset(pOutBufAddr, 0, 20 - strlen(outBuf));
 			if(row >= 16)
 			{
 				*(pOutBufAddr + 0)	= h2StrBuf[4];
@@ -397,13 +406,13 @@ int fontOutputFile(FILE *fpOut, unsigned char *srcBuf, DWORD column, DWORD row, 
 			else
 			{
 			}
-			strcat_s(outBuf, 50, "h\r");
-			fwrite(outBuf, sizeof(char), strlen(outBuf), fpOut);
+			strcat_s(outBuf, 20, "h\r\n");
+			pOutBufAddr	= outBuf + strlen(outBuf);
+			memset(pOutBufAddr, 0, 20 - strlen(outBuf));
+			memcpy(outFileByte + i * 20, outBuf, 20);
 		}
 	}
-	else
-	{
-	}
+
 	return 0;
 }
 
@@ -420,63 +429,95 @@ DWORD WINAPI fontThreadProc(LPVOID lpParameter)
 			msg = threadMsgQueue.front();
 			switch(msg)
 			{
-			case USER_QUEUE_MSG_OPEN_FILE:
-				//listbox->ResetContent();
-				{
-					CListBox *debugList = (CListBox*)GetDlgItem(hwnd, IDC_LIST1);;
-					DWORD fileLen = 0;
-
-					//dlg->pSrcFile
-
-					fseek(dlg->pSrcFile, 0, SEEK_END);
-					fileLen	= ftell(dlg->pSrcFile);
-					fseek(dlg->pSrcFile, 0, SEEK_SET);
-
-					if(INVALID_FILE_SIZE != fileLen)
-					{
-						dlg->srcFileByte = (unsigned char*)malloc(fileLen );
-						memset(dlg->srcFileByte, 0, fileLen);
-						fontGetSrcFileBytes(dlg->pSrcFile, dlg->srcFileByte, fileLen);
-
-						#if 0
-							{
-								FILE *fpout;
-								fopen_s(&fpout, "test.txt", "wb+");
-								if(NULL != fpout)
-								{
-									fwrite(srcFileByte,1,fileLen,fpout);
-									fclose(fpout);
-									fpout = NULL;
-								}
-							}
-						#endif
-
-						//获取行列，并将非有效的数据滤掉，例如\r\n
-						fontGetConvertConfig(dlg->srcFileByte, fileLen, &(dlg->column), &(dlg->row));
-					}
-					else
-					{
-						//debugList->AddString(_T("fileSize is err!\n"));
-						MessageBox(NULL,_T("文件打开失败"), _T("注意"), MB_OK);
-						TRACE("open file fail!\n");
-					}
-				}
-
-				break;
+				case USER_QUEUE_MSG_OPEN_FILE:
+					break;
 
 				case USER_QUEUE_MSG_OUTPUT_FILE:
-					fontOutputFile(dlg->pOutFile, dlg->srcFileByte, dlg->column, dlg->row, dlg->scanDirectFlag);
+					{
+						DWORD fileLen = 0;
+
+						fopen_s(&(dlg->pSrcFile), dlg->srcFileName, "rb");//打开源文件
+
+						if(NULL == dlg->pSrcFile)
+						{
+							MessageBox(NULL,_T("文件打开失败"), _T("注意"), MB_OK);
+							break;
+						}
+
+						//获取文件内容长度
+						fseek(dlg->pSrcFile, 0, SEEK_END);
+						fileLen	= ftell(dlg->pSrcFile);
+						fseek(dlg->pSrcFile, 0, SEEK_SET);
+
+						if(INVALID_FILE_SIZE == fileLen)
+						{
+							if(dlg->pSrcFile)
+							{
+								dlg->pSrcFile = NULL;
+							}
+							MessageBox(NULL,_T("文件无内容"), _T("注意"), MB_OK);
+							break;
+						}
+
+						//申请内存用于读取源文件
+						dlg->srcFileByte = (unsigned char*)malloc(fileLen);
+						memset(dlg->srcFileByte, 0, fileLen);
+						//读取源文件内容
+						fontGetSrcFileBytes(dlg->pSrcFile, dlg->srcFileByte, fileLen);
+						//关闭源文件
+						if(dlg->pSrcFile)
+						{
+							fclose(dlg->pSrcFile);
+							dlg->pSrcFile = NULL;
+						}
+						//获取行列，并将非有效的数据滤掉，例如\r\n
+						fontGetConvertConfig(dlg->srcFileByte, fileLen, &(dlg->column), &(dlg->row));
+						//申请内存用于存储输出文件
+						dlg->outFileByte = (char*)malloc(20 * dlg->column);
+						memset(dlg->outFileByte, 0, 20 * dlg->column);
+						fontOutputFile(dlg->outFileByte, dlg->srcFileByte, dlg->column, dlg->row,dlg->scanDirectFlag);
+						//释放源文件内容内存
+						if(dlg->srcFileByte)
+						{
+							free(dlg->srcFileByte);
+							dlg->srcFileByte = NULL;
+						}
+					}
+					fopen_s(&(dlg->pOutFile), dlg->outFileName, "wb+");
+					if(NULL == dlg->pOutFile)//打开源文件
+					{
+						MessageBox(NULL,_T("输出文件创建失败"), _T("注意"), MB_OK);
+						break;
+					}
+
+					{
+						DWORD i;
+						for(i = 0; i < dlg->column; i ++)
+						{
+							fwrite(dlg->outFileByte + 20 * i, 1, strlen(dlg->outFileByte + 20 * i), dlg->pOutFile);
+						}
+					}
+
+					if(dlg->outFileByte)
+					{
+						free(dlg->outFileByte);
+						dlg->outFileByte = NULL;
+					}
+
+					if(dlg->pOutFile)
+					{
+						fclose(dlg->pOutFile);
+						dlg->pOutFile = NULL;
+					}
 					MessageBox(NULL,_T("文件转换结束"), _T("成功"), MB_OK);
 					break;
-			default:
-				break;
+				default:
+					break;
 			}
-
-
 
 			threadMsgQueue.pop();
 		}
-		Sleep(1000);
+		Sleep(100);
 	}
 	return 0;
 }

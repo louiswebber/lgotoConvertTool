@@ -22,7 +22,7 @@ public:
 	char srcFileName[400];
 	char outFileName[400];
 	unsigned char *srcFileByte;
-
+	char *outFileByte;
 	DWORD column;
 	DWORD row;
 	char scanDirectFlag;
