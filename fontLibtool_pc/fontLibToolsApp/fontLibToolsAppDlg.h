@@ -17,10 +17,10 @@ public:
 
 
 	HANDLE fontThreadHandle;
-	FILE* pSrcFile;
-	FILE* pOutFile;
-	CString srcFileName;
-	CString outFileName;
+	FILE *pSrcFile;
+	FILE *pOutFile;
+	char srcFileName[400];
+	char outFileName[400];
 	unsigned char *srcFileByte;
 
 	DWORD column;
@@ -48,4 +48,5 @@ public:
 	afx_msg void OnBnClickedButton1();
 	afx_msg void OnLbnSelchangeList1();
 	afx_msg void OnBnClickedButton2();
+	afx_msg void OnBnClickedButton3();
 };

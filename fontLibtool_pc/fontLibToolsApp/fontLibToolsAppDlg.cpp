@@ -69,6 +69,7 @@ BEGIN_MESSAGE_MAP(CfontLibToolsAppDlg, CDialogEx)
 	ON_WM_QUERYDRAGICON()
 	ON_BN_CLICKED(IDC_BUTTON1, &CfontLibToolsAppDlg::OnBnClickedButton1)
 	ON_BN_CLICKED(IDC_BUTTON2, &CfontLibToolsAppDlg::OnBnClickedButton2)
+	ON_BN_CLICKED(IDC_BUTTON3, &CfontLibToolsAppDlg::OnBnClickedButton3)
 END_MESSAGE_MAP()
 
 
@@ -108,6 +109,7 @@ BOOL CfontLibToolsAppDlg::OnInitDialog()
 	pwnd	= FromHandle(hwnd);//根据句柄转化成对话框指针
 	pSrcFile	= NULL;
 	scanDirectFlag	= USER_DIRECT_R2L;//初始化扫描方向默认从右到左
+	SetDlgItemText(IDC_BUTTON3, _T("从右向左"));
 	fontThreadHandle = CreateThread(NULL, 0, fontThreadProc, NULL, 0, NULL);
 
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
@@ -172,22 +174,30 @@ void CfontLibToolsAppDlg::OnBnClickedButton1()
 	fileDlg.m_ofn.lpstrFilter=_T("asm文件(*.asm)\0*.asm\0所有文件(*.*)\0*.*\0");
 	if( IDOK ==fileDlg.DoModal())
 	{
-		srcFileName = fileDlg.GetPathName();
-		SetDlgItemText(IDC_EDIT1, srcFileName);
+		CString srcName = fileDlg.GetPathName();
+		SetDlgItemText(IDC_EDIT1, srcName);
 
 		int lenth	= 0;
-		char *buf;
 
-		lenth	= WideCharToMultiByte(CP_ACP, 0, srcFileName, -1, NULL, 0, NULL, 0);
-		buf	= (char*)calloc(lenth, sizeof(char));
-		memset(buf, 0, lenth*(sizeof(unsigned char)));
-		WideCharToMultiByte(CP_ACP, 0, srcFileName, -1, buf, lenth, NULL, 0);
+		lenth	= WideCharToMultiByte(CP_ACP, 0, srcName, -1, NULL, 0, NULL, 0);
+		memset(srcFileName, 0, sizeof(srcFileName));
+		WideCharToMultiByte(CP_ACP, 0, srcName, -1, srcFileName, lenth, NULL, 0);
 
-		fopen_s(&pSrcFile, buf, "rb");
+		memset(outFileName, 0, sizeof(outFileName));
+		memcpy(outFileName, srcFileName, sizeof(outFileName));
 
-		free(buf);
-		buf = 0;
+		{
+			char *pAddr1 = outFileName, *pAddr2 = outFileName;
 
+			while(pAddr1 = strstr(pAddr1, "\\"))
+			{
+				pAddr1 ++;
+				pAddr2 = pAddr1;
+			}
+
+			memset(pAddr2, 0, 400 - (pAddr2 - outFileName));
+			memcpy(pAddr2, "demo_cpp.asm", strlen("demo_cpp.asm"));
+		}
 		threadMsgQueue.push(USER_QUEUE_MSG_OPEN_FILE);
 	}
 }
@@ -195,39 +205,15 @@ void CfontLibToolsAppDlg::OnBnClickedButton1()
 void CfontLibToolsAppDlg::OnBnClickedButton2()
 {
 	// TODO: 在此添加控件通知处理程序代码
-	CFileDialog fileDlg(FALSE);// TRUE for FileOpen, FALSE for FileSaveAs
-	fileDlg.m_ofn.lpstrTitle=_T("选择要计算的文件");
-	fileDlg.m_ofn.lpstrFilter=_T("asm文件(*.asm)\0*.asm\0");
-	if( IDOK ==fileDlg.DoModal())
-	{
-		outFileName = fileDlg.GetPathName() + _T(".asm");
-		SetDlgItemText(IDC_EDIT2, outFileName);
 
-		int lenth	= 0;
-		char *buf;
+	threadMsgQueue.push(USER_QUEUE_MSG_OUTPUT_FILE);
 
-		lenth	= WideCharToMultiByte(CP_ACP, 0, outFileName, -1, NULL, 0, NULL, 0);
-		buf	= (char*)calloc(lenth, sizeof(char));
-		memset(buf, 0, lenth*(sizeof(char)));
-		WideCharToMultiByte(CP_ACP, 0, outFileName, -1, buf, lenth, NULL, 0);
-		//CFile file( fileDlg.GetPathName(), CFile::modeRead);
-
-		//strcat_s(buf, (lenth + 20)*(sizeof(char)), ".asm");
-		if(0 != fopen_s(&pOutFile, buf, "w+"))
-		{
-		}
-
-		free(buf);
-		buf = 0;
-
-		threadMsgQueue.push(USER_QUEUE_MSG_OUTPUT_FILE);
-	}
 }
 
 int fontGetSrcFileBytes(FILE* fp, unsigned char* pOutBuf, DWORD len)
 {
 	CListBox *debugList = (CListBox*)GetDlgItem(hwnd, IDC_LIST1);
-	
+
 	if((NULL == pOutBuf) || (NULL == fp))
 	{
 		//debugList->AddString(_T("point is NULL\n"));
@@ -356,7 +342,7 @@ int fontOutputFile(FILE *fpOut, unsigned char *srcBuf, DWORD column, DWORD row, 
 			else
 			{
 			}
-			strcat_s(outBuf, 50, "h\r\n");
+			strcat_s(outBuf, 50, "h\r");
 			fwrite(outBuf, sizeof(char), strlen(outBuf), fpOut);
 		}
 	}
@@ -411,7 +397,7 @@ int fontOutputFile(FILE *fpOut, unsigned char *srcBuf, DWORD column, DWORD row, 
 			else
 			{
 			}
-			strcat_s(outBuf, 50, "h\r\n");
+			strcat_s(outBuf, 50, "h\r");
 			fwrite(outBuf, sizeof(char), strlen(outBuf), fpOut);
 		}
 	}
@@ -439,6 +425,8 @@ DWORD WINAPI fontThreadProc(LPVOID lpParameter)
 				{
 					CListBox *debugList = (CListBox*)GetDlgItem(hwnd, IDC_LIST1);;
 					DWORD fileLen = 0;
+
+					//dlg->pSrcFile
 
 					fseek(dlg->pSrcFile, 0, SEEK_END);
 					fileLen	= ftell(dlg->pSrcFile);
@@ -493,3 +481,19 @@ DWORD WINAPI fontThreadProc(LPVOID lpParameter)
 	return 0;
 }
 
+
+
+void CfontLibToolsAppDlg::OnBnClickedButton3()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	if(USER_DIRECT_R2L == scanDirectFlag)
+	{
+		SetDlgItemText(IDC_BUTTON3, _T("从左向右"));
+		scanDirectFlag = USER_DIRECT_L2R;
+	}
+	else if(USER_DIRECT_L2R == scanDirectFlag)
+	{
+		SetDlgItemText(IDC_BUTTON3, _T("从右向左"));
+		scanDirectFlag = USER_DIRECT_R2L;
+	}
+}
